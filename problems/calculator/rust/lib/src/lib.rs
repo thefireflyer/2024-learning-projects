@@ -94,17 +94,15 @@ impl Document {
 
 //---------------------------------------------------------------------------//
 
-impl<'a> From<&'a str> for Document {
-    fn from(value: &str) -> Self {
-        todo!()
-    }
-}
+impl<'a> From<&'static str> for Document {
+    fn from(value: &'static str) -> Self {
+        let mut res: Document = Default::default();
 
-//---------------------------------------------------------------------------//
+        for line in value.split(['\n', ';']) {
+            res.contents.push(line.into());
+        }
 
-impl<'a> From<Vec<&'a str>> for Document {
-    fn from(value: Vec<&str>) -> Self {
-        todo!()
+        res
     }
 }
 
@@ -138,15 +136,19 @@ enum Expr {
     Int(i32),
     Flt(f64),
     // '1
-    Var(&'static str),
+    Var(String),
     // '1'2'3
     Rel(Box<Expr>, RelType, Box<Expr>),
     // '1(..'2)
-    Fn(&'static str, Vec<Expr>),
+    Fn(String, Vec<Expr>),
     // '1'2'3
     Op(Box<Expr>, OpType, Box<Expr>),
     // '1='2
-    Where(Box<Expr>, &'static str, Box<Expr>),
+    Where(Box<Expr>, String, Box<Expr>),
+    //
+    Leaf,
+    // '1
+    Block(Box<Expr>),
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -410,7 +412,12 @@ impl Expr {
             }
             Expr::Where(a, sym, b) => {
                 b.normalize();
-                a.and_where(&sym, b);
+                a.and_where(sym, b);
+                a.normalize();
+                *self = *a.clone();
+            }
+            Expr::Leaf => {}
+            Expr::Block(a) => {
                 a.normalize();
                 *self = *a.clone();
             }
@@ -429,7 +436,7 @@ impl Expr {
         todo!()
     }
 
-    fn and_where(&mut self, given: &'static str, value: &Expr) {
+    fn and_where(&mut self, given: &str, value: &Expr) {
         match self {
             Expr::Int(_) => {}
             Expr::Flt(_) => {}
@@ -452,6 +459,8 @@ impl Expr {
                 a.and_where(given, value);
                 b.and_where(given, value);
             }
+            Expr::Leaf => {}
+            Expr::Block(a) => a.and_where(given, value),
         }
     }
 }
@@ -472,7 +481,102 @@ impl From<f64> for Expr {
 
 impl From<&'static str> for Expr {
     fn from(value: &'static str) -> Self {
-        Self::Var(value)
+        let value = value.trim();
+        if let Ok(value) = value.parse::<i32>() {
+            Expr::Int(value)
+        } else if let Ok(value) = value.parse::<f64>() {
+            Expr::Flt(value)
+        } else if value.is_empty() {
+            Expr::Leaf
+        } else if let Some((a, b)) = value.split_once("|") {
+            if let Some((b, c)) = b.split_once('=') {
+                Expr::Where(
+                    Box::new(a.trim().into()),
+                    b.trim().to_owned(),
+                    Box::new(c.trim().into()),
+                )
+            } else {
+                panic!("Invalid `where` expression, missing actual value")
+            }
+        } else if let Some((a, b)) = value.split_once('=') {
+            Expr::rel(a.into(), RelType::Eq, b.into())
+        } else if value.contains('(') {
+            let mut matches = value
+                .chars()
+                .enumerate()
+                .fold(
+                    (vec![], vec![]),
+                    |(mut stack, mut acc), (ind, ch)| match ch {
+                        '(' => {
+                            stack.push(ind);
+                            (stack, acc)
+                        }
+                        ')' => {
+                            let depth = stack.len();
+                            let init = stack.pop().unwrap();
+                            if depth == 1 {
+                                acc.push((init, ind, depth));
+                            }
+                            (stack, acc)
+                        }
+                        _ => (stack, acc),
+                    },
+                )
+                .1;
+
+            let mut parts: Vec<Expr> = vec![];
+            let mut joins: Vec<String> = vec![];
+
+            let mut last_close = 0;
+
+            for (start, end, _) in matches {
+                if start > last_close {
+                    // println!("<: {:?}", value[last_close..start - 1].to_owned());
+                    parts.push(value[last_close..start - 1].into());
+                    // println!("<< {:?}", value[start - 1..start].to_owned());
+                    joins.push(value[start - 1..start].to_owned());
+                }
+                // println!(">: {:?}", value[start + 1..end].to_owned());
+                parts.push(value[start + 1..end].into());
+                last_close = end;
+            }
+
+            if last_close + 2 < value.len() {
+                parts.push(value[last_close + 2..].into());
+                // println!(":: {}", value[last_close + 1..last_close + 2].to_owned());
+                joins.push(value[last_close + 1..last_close + 2].to_owned());
+            }
+
+            let res = parts
+                .clone()
+                .into_iter()
+                .reduce(|acc, part| match joins.pop().unwrap().as_str() {
+                    "+" => Self::op(acc, OpType::Add, part),
+                    "-" => Self::op(acc, OpType::Sub, part),
+                    "*" => Self::op(acc, OpType::Mul, part),
+                    "/" => Self::op(acc, OpType::Div, part),
+                    "^" => Self::op(acc, OpType::Pow, part),
+                    _ => panic!("Unknown"),
+                })
+                .unwrap()
+                .to_owned();
+
+            // println!("{:?}\n=> {}\n", parts, res);
+
+            res
+        } else if let Some((a, b)) = value.split_once('-') {
+            Expr::op(a.trim().into(), OpType::Sub, b.trim().into())
+        } else if let Some((a, b)) = value.split_once('+') {
+            Expr::op(a.trim().into(), OpType::Add, b.trim().into())
+        } else if let Some((a, b)) = value.split_once('/') {
+            Expr::op(a.trim().into(), OpType::Div, b.trim().into())
+        } else if let Some((a, b)) = value.split_once('*') {
+            Expr::op(a.trim().into(), OpType::Mul, b.trim().into())
+        } else if let Some((a, b)) = value.split_once('^') {
+            Expr::op(a.trim().into(), OpType::Pow, b.trim().into())
+        } else {
+            Expr::Var(value.trim().to_owned())
+        }
     }
 }
 
@@ -483,7 +587,8 @@ impl std::fmt::Display for Expr {
         match self {
             Expr::Int(a) => f.write_fmt(format_args!("{}", a)),
             Expr::Flt(a) => f.write_fmt(format_args!("{}", a)),
-            Expr::Var(a) => f.write_str(a),
+            Expr::Var(a) => f.write_fmt(format_args!("{{{}}}", a)),
+            // Expr::Var(a) => f.write_str(a),
             Expr::Rel(a, b, c) => f.write_fmt(format_args!("{} {} {}", a, b, c)),
             Expr::Fn(a, args) => {
                 f.write_str(a)?;
@@ -500,13 +605,13 @@ impl std::fmt::Display for Expr {
                 let a = match a.as_ref() {
                     Expr::Int(a) => format!("{}", a),
                     Expr::Flt(a) => format!("{}", a),
-                    Expr::Var(a) => format!("{}", a),
+                    Expr::Var(a) => format!("{{{}}}", a),
                     _ => format!("({})", a),
                 };
                 let b = match b.as_ref() {
                     Expr::Int(b) => format!("{}", b),
                     Expr::Flt(b) => format!("{}", b),
-                    Expr::Var(b) => format!("{}", b),
+                    Expr::Var(b) => format!("{{{}}}", b),
                     _ => format!("({})", b),
                 };
                 f.write_fmt(format_args!("{}*{}", a, b))
@@ -515,13 +620,13 @@ impl std::fmt::Display for Expr {
                 let a = match a.as_ref() {
                     Expr::Int(a) => format!("{}", a),
                     Expr::Flt(a) => format!("{}", a),
-                    Expr::Var(a) => format!("{}", a),
+                    Expr::Var(a) => format!("{{{}}}", a),
                     _ => format!("({})", a),
                 };
                 let b = match b.as_ref() {
                     Expr::Int(b) => format!("{}", b),
                     Expr::Flt(b) => format!("{}", b),
-                    Expr::Var(b) => format!("{}", b),
+                    Expr::Var(b) => format!("{{{}}}", b),
                     _ => format!("({})", b),
                 };
                 f.write_fmt(format_args!("{}/{}", a, b))
@@ -530,19 +635,21 @@ impl std::fmt::Display for Expr {
                 let a = match a.as_ref() {
                     Expr::Int(a) => format!("{}", a),
                     Expr::Flt(a) => format!("{}", a),
-                    Expr::Var(a) => format!("{}", a),
+                    Expr::Var(a) => format!("{{{}}}", a),
                     _ => format!("({})", a),
                 };
                 let b = match b.as_ref() {
                     Expr::Int(b) => format!("{}", b),
                     Expr::Flt(b) => format!("{}", b),
-                    Expr::Var(b) => format!("{}", b),
+                    Expr::Var(b) => format!("{{{}}}", b),
                     _ => format!("({})", b),
                 };
                 f.write_fmt(format_args!("{}^{}", a, b))
             }
             Expr::Op(a, o, b) => f.write_fmt(format_args!("{} {} {}", a, o, b)),
             Expr::Where(a, b, c) => f.write_fmt(format_args!("{} | {} = {}", a, b, c)),
+            Expr::Leaf => f.write_str("`"),
+            Expr::Block(a) => f.write_fmt(format_args!("{}", a)),
         }
     }
 }
@@ -646,11 +753,11 @@ mod tests {
                 2.into(),
             ),
             Expr::Fn(
-                "sin",
+                "sin".to_string(),
                 vec![Expr::unit(2.into(), 3.into(), "x".into(), 1.into())],
             ),
             Expr::Fn(
-                "f",
+                "f".to_string(),
                 vec![
                     Expr::unit(2.into(), 3.into(), "x".into(), 1.into()),
                     Expr::unit("y".into(), 5.into(), 10.into(), 1.into()),
@@ -658,7 +765,7 @@ mod tests {
                 ],
             ),
             Expr::rel(
-                Expr::Fn("f", vec!["x".into(), "y".into(), "z".into()]),
+                Expr::Fn("f".to_string(), vec!["x".into(), "y".into(), "z".into()]),
                 crate::RelType::Eq,
                 Expr::unit("x".into(), "y".into(), "z".into(), 2.into()),
             ),
@@ -666,12 +773,31 @@ mod tests {
             Expr::op(7.into(), OpType::Div, 14.into()),
             Expr::Where(
                 Box::new(Expr::unit("x".into(), 6.into(), 14.into(), 2.into())),
-                "x",
+                "x".to_string(),
                 Box::new(Expr::op(5.into(), OpType::Add, 7.into())),
             ),
         ]);
 
         println!("{}\n", doc);
+        doc.normalize();
+        println!("{}", doc);
+    }
+
+    // f(2*((3/x)^1), y*((5/10)^1), z*((3/z)^1))
+
+    #[test]
+    fn parser() {
+        let input = "
+        1+1
+        1+1-1*2
+        1.0+2.43
+        2*(3+1*x)
+        x*(((x^2)/x)^1)
+        x*((6/14)^2) | x = 5 + 7
+        ";
+        let mut doc: Document = input.into();
+
+        println!("{}\n{}\n", input, doc);
         doc.normalize();
         println!("{}", doc);
     }
