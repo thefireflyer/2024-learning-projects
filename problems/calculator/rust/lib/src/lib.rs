@@ -1,5 +1,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
+#![allow(dead_code)]
+
+mod parser;
+
 /**
  * # Calculator library #######################################################
  *
@@ -66,8 +70,8 @@
  *
  * ############################################################################
  */
-
 ////////////////////////////////////////////////////////////////////////////////
+use std::str::FromStr;
 
 struct _Root;
 
@@ -94,15 +98,17 @@ impl Document {
 
 //---------------------------------------------------------------------------//
 
-impl<'a> From<&'static str> for Document {
-    fn from(value: &'static str) -> Self {
+impl FromStr for Document {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let mut res: Document = Default::default();
 
         for line in value.split(['\n', ';']) {
-            res.contents.push(line.into());
+            res.contents.push(line.parse()?);
         }
 
-        res
+        Ok(res)
     }
 }
 
@@ -143,12 +149,10 @@ enum Expr {
     Fn(String, Vec<Expr>),
     // '1'2'3
     Op(Box<Expr>, OpType, Box<Expr>),
-    // '1='2
+    // '1 | '2 = '3
     Where(Box<Expr>, String, Box<Expr>),
     //
     Leaf,
-    // '1
-    Block(Box<Expr>),
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -263,17 +267,6 @@ impl Expr {
                     }
 
                     // --- factoring cases ------------------------------------
-                    // (Expr::Int(a), OpType::Div, Expr::Int(b)) if a / b > 1 => {
-                    //     // handle case where n is a multiple of d
-                    //     // (d*m)/d -> m OR (n*m)/d -> m(n/d)
-                    //     let c = a / b;
-                    //     let n = a / c;
-                    //     let frac = Expr::op(n.into(), OpType::Div, (*b).into());
-
-                    //     *self = Expr::op(c.into(), OpType::Mul, frac);
-
-                    //     self.normalize();
-                    // }
                     (Expr::Int(a), OpType::Div, Expr::Int(b)) if b % a == 0 => {
                         // handle case where d is a constant multiple of n
                         // n/(n*m) -> 1/m
@@ -417,10 +410,6 @@ impl Expr {
                 *self = *a.clone();
             }
             Expr::Leaf => {}
-            Expr::Block(a) => {
-                a.normalize();
-                *self = *a.clone();
-            }
         }
     }
 
@@ -460,7 +449,6 @@ impl Expr {
                 b.and_where(given, value);
             }
             Expr::Leaf => {}
-            Expr::Block(a) => a.and_where(given, value),
         }
     }
 }
@@ -479,29 +467,45 @@ impl From<f64> for Expr {
     }
 }
 
-impl From<&'static str> for Expr {
-    fn from(value: &'static str) -> Self {
+impl From<&str> for Expr {
+    fn from(value: &str) -> Self {
+        Self::Var(value.to_owned())
+    }
+}
+
+//---------------------------------------------------------------------------//
+
+impl FromStr for Expr {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let value = value.trim();
-        if let Ok(value) = value.parse::<i32>() {
-            Expr::Int(value)
+        println!("{:?}", value);
+
+        if value.is_empty() {
+            Ok(Expr::Leaf)
+        } else if let Ok(value) = value.parse::<OpType>() {
+            todo!()
+        } else if let Ok(value) = value.parse::<RelType>() {
+            todo!()
+        } else if let Ok(value) = value.parse::<i32>() {
+            Ok(Expr::Int(value))
         } else if let Ok(value) = value.parse::<f64>() {
-            Expr::Flt(value)
-        } else if value.is_empty() {
-            Expr::Leaf
+            Ok(Expr::Flt(value))
         } else if let Some((a, b)) = value.split_once("|") {
             if let Some((b, c)) = b.split_once('=') {
-                Expr::Where(
-                    Box::new(a.trim().into()),
+                Ok(Expr::Where(
+                    Box::new(a.parse()?),
                     b.trim().to_owned(),
-                    Box::new(c.trim().into()),
-                )
+                    Box::new(c.parse()?),
+                ))
             } else {
-                panic!("Invalid `where` expression, missing actual value")
+                Err("Invalid `where` expression, missing actual value".to_owned())
             }
         } else if let Some((a, b)) = value.split_once('=') {
-            Expr::rel(a.into(), RelType::Eq, b.into())
+            Ok(Expr::rel(a.parse()?, RelType::Eq, b.parse()?))
         } else if value.contains('(') {
-            let mut matches = value
+            let matches = value
                 .chars()
                 .enumerate()
                 .fold(
@@ -513,7 +517,7 @@ impl From<&'static str> for Expr {
                         }
                         ')' => {
                             let depth = stack.len();
-                            let init = stack.pop().unwrap();
+                            let init = stack.pop().expect("Mismatched brackets");
                             if depth == 1 {
                                 acc.push((init, ind, depth));
                             }
@@ -530,52 +534,76 @@ impl From<&'static str> for Expr {
             let mut last_close = 0;
 
             for (start, end, _) in matches {
-                if start > last_close {
-                    // println!("<: {:?}", value[last_close..start - 1].to_owned());
-                    parts.push(value[last_close..start - 1].into());
-                    // println!("<< {:?}", value[start - 1..start].to_owned());
-                    joins.push(value[start - 1..start].to_owned());
+                if value[start..end].contains(',') {
+                } else {
+                    if start > last_close {
+                        println!(
+                            ":: {} :: {}",
+                            value[last_close..start - 1].to_owned(),
+                            value[start - 1..start].to_owned()
+                        );
+                        let join = value[start - 1..start].to_owned();
+                        if &join == "+"
+                            || &join == "-"
+                            || &join == "*"
+                            || &join == "/"
+                            || &join == "^"
+                        {
+                            // parts.push(value[last_close..start - 1].into());
+                            joins.push(value[start - 1..start].to_owned());
+                        } else {
+                            parts.push(value[last_close..start].parse()?);
+                            // joins.push("*".to_owned());
+                        }
+                    }
+                    parts.push(value[start + 1..end].parse()?);
+                    last_close = end;
                 }
-                // println!(">: {:?}", value[start + 1..end].to_owned());
-                parts.push(value[start + 1..end].into());
-                last_close = end;
             }
 
             if last_close + 2 < value.len() {
-                parts.push(value[last_close + 2..].into());
-                // println!(":: {}", value[last_close + 1..last_close + 2].to_owned());
-                joins.push(value[last_close + 1..last_close + 2].to_owned());
+                let join = value[last_close + 1..last_close + 2].to_owned();
+                if &join == "+" || &join == "-" || &join == "*" || &join == "/" || &join == "^" {
+                    parts.push(value[last_close + 2..].parse()?);
+                    joins.push(value[last_close + 1..last_close + 2].to_owned());
+                } else {
+                    parts.push(value[last_close + 1..].parse()?);
+                }
+            } else if last_close + 1 < value.len() {
+                parts.push(value[last_close + 1..].parse()?);
             }
 
-            let res = parts
+            println!("{:?}\n{:?}\n", parts, joins);
+
+            Ok(parts
                 .clone()
                 .into_iter()
-                .reduce(|acc, part| match joins.pop().unwrap().as_str() {
-                    "+" => Self::op(acc, OpType::Add, part),
-                    "-" => Self::op(acc, OpType::Sub, part),
-                    "*" => Self::op(acc, OpType::Mul, part),
-                    "/" => Self::op(acc, OpType::Div, part),
-                    "^" => Self::op(acc, OpType::Pow, part),
-                    _ => panic!("Unknown"),
+                .reduce(|acc, part| {
+                    Self::op(
+                        acc,
+                        joins
+                            .pop()
+                            .unwrap_or("*".to_owned())
+                            .as_str()
+                            .parse()
+                            .unwrap(),
+                        part,
+                    )
                 })
                 .unwrap()
-                .to_owned();
-
-            // println!("{:?}\n=> {}\n", parts, res);
-
-            res
+                .to_owned())
         } else if let Some((a, b)) = value.split_once('-') {
-            Expr::op(a.trim().into(), OpType::Sub, b.trim().into())
+            Ok(Expr::op(a.parse()?, OpType::Sub, b.parse()?))
         } else if let Some((a, b)) = value.split_once('+') {
-            Expr::op(a.trim().into(), OpType::Add, b.trim().into())
+            Ok(Expr::op(a.parse()?, OpType::Add, b.parse()?))
         } else if let Some((a, b)) = value.split_once('/') {
-            Expr::op(a.trim().into(), OpType::Div, b.trim().into())
+            Ok(Expr::op(a.parse()?, OpType::Div, b.parse()?))
         } else if let Some((a, b)) = value.split_once('*') {
-            Expr::op(a.trim().into(), OpType::Mul, b.trim().into())
+            Ok(Expr::op(a.parse()?, OpType::Mul, b.parse()?))
         } else if let Some((a, b)) = value.split_once('^') {
-            Expr::op(a.trim().into(), OpType::Pow, b.trim().into())
+            Ok(Expr::op(a.parse()?, OpType::Pow, b.parse()?))
         } else {
-            Expr::Var(value.trim().to_owned())
+            Ok(Expr::Var(value.to_owned()))
         }
     }
 }
@@ -591,6 +619,7 @@ impl std::fmt::Display for Expr {
             // Expr::Var(a) => f.write_str(a),
             Expr::Rel(a, b, c) => f.write_fmt(format_args!("{} {} {}", a, b, c)),
             Expr::Fn(a, args) => {
+                f.write_str("\\")?;
                 f.write_str(a)?;
                 f.write_str("(")?;
                 let mut args = args.into_iter();
@@ -601,7 +630,9 @@ impl std::fmt::Display for Expr {
                 f.write_str(")")?;
                 Ok(())
             }
-            Expr::Op(a, o, b) if o == &OpType::Mul => {
+            Expr::Op(a, o, b)
+                if (o == &OpType::Mul) | (o == &OpType::Div) | (o == &OpType::Pow) =>
+            {
                 let a = match a.as_ref() {
                     Expr::Int(a) => format!("{}", a),
                     Expr::Flt(a) => format!("{}", a),
@@ -614,42 +645,11 @@ impl std::fmt::Display for Expr {
                     Expr::Var(b) => format!("{{{}}}", b),
                     _ => format!("({})", b),
                 };
-                f.write_fmt(format_args!("{}*{}", a, b))
-            }
-            Expr::Op(a, o, b) if o == &OpType::Div => {
-                let a = match a.as_ref() {
-                    Expr::Int(a) => format!("{}", a),
-                    Expr::Flt(a) => format!("{}", a),
-                    Expr::Var(a) => format!("{{{}}}", a),
-                    _ => format!("({})", a),
-                };
-                let b = match b.as_ref() {
-                    Expr::Int(b) => format!("{}", b),
-                    Expr::Flt(b) => format!("{}", b),
-                    Expr::Var(b) => format!("{{{}}}", b),
-                    _ => format!("({})", b),
-                };
-                f.write_fmt(format_args!("{}/{}", a, b))
-            }
-            Expr::Op(a, o, b) if o == &OpType::Pow => {
-                let a = match a.as_ref() {
-                    Expr::Int(a) => format!("{}", a),
-                    Expr::Flt(a) => format!("{}", a),
-                    Expr::Var(a) => format!("{{{}}}", a),
-                    _ => format!("({})", a),
-                };
-                let b = match b.as_ref() {
-                    Expr::Int(b) => format!("{}", b),
-                    Expr::Flt(b) => format!("{}", b),
-                    Expr::Var(b) => format!("{{{}}}", b),
-                    _ => format!("({})", b),
-                };
-                f.write_fmt(format_args!("{}^{}", a, b))
+                f.write_fmt(format_args!("{}{}{}", a, o, b))
             }
             Expr::Op(a, o, b) => f.write_fmt(format_args!("{} {} {}", a, o, b)),
             Expr::Where(a, b, c) => f.write_fmt(format_args!("{} | {} = {}", a, b, c)),
             Expr::Leaf => f.write_str("`"),
-            Expr::Block(a) => f.write_fmt(format_args!("{}", a)),
         }
     }
 }
@@ -683,6 +683,24 @@ impl std::fmt::Display for RelType {
 
 //---------------------------------------------------------------------------//
 
+impl FromStr for RelType {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "=" => Ok(Self::Eq),
+            ">" => Ok(Self::L),
+            "<" => Ok(Self::G),
+            ">=" => Ok(Self::Leq),
+            "<=" => Ok(Self::Geq),
+            "!=" => Ok(Self::Neq),
+            _ => Err("Unknown relation token".to_owned()),
+        }
+    }
+}
+
+//---------------------------------------------------------------------------//
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum OpType {
     Add,
@@ -702,6 +720,23 @@ impl std::fmt::Display for OpType {
             OpType::Mul => f.write_str("*"),
             OpType::Div => f.write_str("/"),
             OpType::Pow => f.write_str("^"),
+        }
+    }
+}
+
+//---------------------------------------------------------------------------//
+
+impl FromStr for OpType {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "+" => Ok(Self::Add),
+            "-" => Ok(Self::Sub),
+            "*" => Ok(Self::Mul),
+            "/" => Ok(Self::Div),
+            "^" => Ok(Self::Pow),
+            _ => Err("Unknown operation token".to_owned()),
         }
     }
 }
@@ -783,8 +818,6 @@ mod tests {
         println!("{}", doc);
     }
 
-    // f(2*((3/x)^1), y*((5/10)^1), z*((3/z)^1))
-
     #[test]
     fn parser() {
         let input = "
@@ -793,9 +826,11 @@ mod tests {
         1.0+2.43
         2*(3+1*x)
         x*(((x^2)/x)^1)
+        x(((x^2)/x)^1)4
+        f(2*((3/x)^1), y*((5/10)^1), z*((3/z)^1))
         x*((6/14)^2) | x = 5 + 7
         ";
-        let mut doc: Document = input.into();
+        let mut doc: Document = input.parse().unwrap();
 
         println!("{}\n{}\n", input, doc);
         doc.normalize();
