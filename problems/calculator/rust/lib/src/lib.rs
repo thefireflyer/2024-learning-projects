@@ -2,7 +2,10 @@
 
 #![allow(dead_code)]
 
+mod ex;
+mod ex2;
 mod parser;
+mod parser2;
 
 /**
  * # Calculator library #######################################################
@@ -811,6 +814,53 @@ mod tests {
                 "x".to_string(),
                 Box::new(Expr::op(5.into(), OpType::Add, 7.into())),
             ),
+            "   ".into(),
+            "   ".into(),
+            "   ".into(),
+            Expr::Fn("sin".to_string(), vec![0.into()]),
+            Expr::Fn("sin".to_string(), vec!["pi".into()]),
+            Expr::Fn("sin".to_string(), vec![1.into()]),
+            Expr::Fn("sin".to_string(), vec![1.0.into()]),
+            Expr::Fn("cos".to_string(), vec![0.into()]),
+            Expr::Fn("cos".to_string(), vec!["pi".into()]),
+            Expr::Fn("cos".to_string(), vec![1.into()]),
+            Expr::Fn("cos".to_string(), vec![1.0.into()]),
+            Expr::Fn(
+                "ln".to_string(),
+                vec![Expr::op("e".into(), OpType::Pow, "x".into())],
+            ),
+            Expr::op(
+                "e".into(),
+                OpType::Pow,
+                Expr::Fn(
+                    "ln".to_string(),
+                    vec![Expr::op("3".into(), OpType::Add, "x".into())],
+                ),
+            ),
+            "   ".into(),
+            "   ".into(),
+            "   ".into(),
+            Expr::Fn("d".to_string(), vec![0.into(), "x".into()]),
+            Expr::Fn("d".to_string(), vec![1.into(), "x".into()]),
+            Expr::Fn("d".to_string(), vec!["x".into(), "x".into()]),
+            Expr::Fn("d".to_string(), vec!["y".into(), "x".into()]),
+            "   ".into(),
+            "   ".into(),
+            "   ".into(),
+            Expr::Fn("int".to_string(), vec![0.into(), "x".into()]),
+            Expr::Fn("int".to_string(), vec![1.into(), "x".into()]),
+            Expr::Fn("int".to_string(), vec!["x".into(), "x".into()]),
+            Expr::Fn("int".to_string(), vec!["y".into(), "x".into()]),
+            "   ".into(),
+            "   ".into(),
+            "   ".into(),
+            Expr::Fn("solve".to_string(), vec![0.into(), "x".into()]),
+            Expr::Fn("solve".to_string(), vec![1.into(), "x".into()]),
+            Expr::Fn("solve".to_string(), vec!["x".into(), "x".into()]),
+            Expr::Fn("solve".to_string(), vec!["y".into(), "x".into()]),
+            "   ".into(),
+            "   ".into(),
+            "   ".into(),
         ]);
 
         println!("{}\n", doc);

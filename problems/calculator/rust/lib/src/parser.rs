@@ -47,33 +47,6 @@ enum Rel {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TOKEN_MAP: [(&str, Token); 22] = [
-    ("+", Token::Op(Op::Add)),
-    ("-", Token::Op(Op::Sub)),
-    ("*", Token::Op(Op::Mul)),
-    ("/", Token::Op(Op::Div)),
-    ("^", Token::Op(Op::Pow)),
-    ("%", Token::Op(Op::Mod)),
-    ("=", Token::Rel(Rel::Eq)),
-    ("!", Token::Rel(Rel::Neg)),
-    (">", Token::Rel(Rel::Ge)),
-    (">=", Token::Rel(Rel::Geq)),
-    ("<", Token::Rel(Rel::Le)),
-    ("<=", Token::Rel(Rel::Leq)),
-    ("(", Token::Open('(')),
-    ("[", Token::Open('[')),
-    ("{", Token::Open('{')),
-    (")", Token::Close(')')),
-    ("]", Token::Close(']')),
-    ("}", Token::Close('}')),
-    ("|", Token::Pred),
-    (",", Token::Comma),
-    ("", Token::Leaf),
-    (";", Token::Term),
-];
-
-////////////////////////////////////////////////////////////////////////////////
-
 impl From<&str> for Token {
     fn from(value: &str) -> Self {
         match value {
@@ -106,35 +79,6 @@ impl From<&str> for Token {
                     Token::Sym(value.to_owned())
                 }
             }
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-impl From<char> for Token {
-    fn from(value: char) -> Self {
-        match value {
-            '+' => Token::Op(Op::Add),
-            '-' => Token::Op(Op::Sub),
-            '*' => Token::Op(Op::Mul),
-            '/' => Token::Op(Op::Div),
-            '^' => Token::Op(Op::Pow),
-            '%' => Token::Op(Op::Mod),
-            '=' => Token::Rel(Rel::Eq),
-            '>' => Token::Rel(Rel::Ge),
-            '<' => Token::Rel(Rel::Le),
-            '!' => Token::Rel(Rel::Neg),
-            '(' => Token::Open('('),
-            '[' => Token::Open('['),
-            '{' => Token::Open('{'),
-            ')' => Token::Close(')'),
-            ']' => Token::Close(']'),
-            '}' => Token::Close('}'),
-            '|' => Token::Pred,
-            ',' => Token::Comma,
-            ';' => Token::Term,
-            _ => Token::Leaf,
         }
     }
 }
@@ -216,7 +160,7 @@ fn tokenize(s: &str, log: &mut Vec<Log>) -> Vec<Token> {
     let mut start = 0;
 
     for (end, ch) in s.chars().enumerate() {
-        let token = Token::from(ch);
+        let token = Token::from(ch.to_string().as_str());
 
         // log.push(Log::Read(token.clone()));
 
@@ -613,6 +557,7 @@ mod tests {
             "2*(3+1*x)",
             "x*(((x^2)/x)^1)",
             "x(((x^2)/x)^1)4",
+            "ln(0)",
             "+ 1 2",
             "x*((6/14)^2) | x = 5 + 7",
             "[1,2]*x*((6/14)^2) | x = 5 + 7*y | y = 2",
@@ -626,7 +571,7 @@ mod tests {
                 Ok(mut y) => {
                     println!("{:17} ==> {}", x, y);
                     y.normalize();
-                    println!("{:17} ==> {}", "|", y);
+                    println!("{:17} --> {}", "|", y);
                 }
                 Err(ys) => {
                     println!("{:17} ==> <!> Failed to parse <!>", x);
