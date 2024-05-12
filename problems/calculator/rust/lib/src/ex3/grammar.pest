@@ -1,0 +1,66 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+
+program = { SOI ~ expr }
+expr    = { prefix? ~ primary ~ postfix? ~ (infix ~ prefix? ~ primary ~ postfix?)* }
+
+infix = _{ op | rel | where }
+op    = _{ add | sub | mul | div | pow | mod }
+rel   = _{ eq | neq | ltt | leq | geq | gtt }
+
+add = { "+" }
+sub = { "-" }
+mul = { "*" }
+div = { "/" }
+pow = { "^" }
+mod = { "%" }
+
+eq  = { "=" }
+neq = { "!=" }
+ltt = { "<" }
+leq = { "<=" }
+geq = { ">=" }
+gtt = { ">" }
+
+where = { "|" }
+
+prefix = _{ neg }
+neg    =  { "-" }
+
+postfix = _{ fac }
+fac     =  { "!" }
+
+primary = _{ tok | num | func | var | group | matrix }
+
+tok = _{ pi | i | e | inf }
+num = _{ flt | int }
+var = @{ ASCII_ALPHA+ ~ ("_" ~ ASCII_ALPHA+)* }
+
+int = @{ ASCII_DIGIT+ }
+flt = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+
+pi  = { "pi" }
+i   = { "i" }
+e   = { "e" }
+inf = { "inf" | "oo" }
+
+func = _{
+    sin
+  | cos
+  | tan
+  | ln
+}
+
+sin = { "sin(" ~ expr ~ ")" }
+cos = { "cos(" ~ expr ~ ")" }
+tan = { "tan(" ~ expr ~ ")" }
+ln  = { "ln(" ~ expr ~ ")" }
+
+group = _{ "(" ~ expr ~ ")" }
+// implicit_mul =  {
+// tok ~ (num | var | group)
+// | num ~ (tok | var | group)
+// | var ~ (tok | num | group)
+// | group ~ (tok | num | var | group)
+// }
+
+matrix = { "[" ~ expr ~ ("," ~ expr)* ~ "]" }

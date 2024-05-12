@@ -4,6 +4,7 @@
 
 mod ex;
 mod ex2;
+mod ex3;
 mod parser;
 mod parser2;
 
