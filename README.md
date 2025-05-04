@@ -4,6 +4,15 @@ Code is available under the ... license.
 
 All other materials are under the ... license.
 
+## Numeric Calculator
+
+[Specification](problems/numeric-calc/spec/main.typ) | [PDF](problems/numeric-calc/spec/main.pdf)
+
+| Language    | Package | Docs    | Tests    | Benchmarks |
+| ----------- | ------- | ------- | -------- | ---------- |
+| [Rust](problems/numeric-calc/rust)    | [...]() | [...]() | ![...]() | ![...]()   |
+| [Haskell]() | [...]() | [...]() | ![...]() | ![...]()   |
+
 ## Parser Generator
 
 [Specification](problems/parser/spec/main.typ) | [PDF](problems/parser/spec/main.pdf)
@@ -19,15 +28,6 @@ All other materials are under the ... license.
 | [Elixir]()     | [...]() | [...]() | ![...]() | ![...]()   |
 | [GNU Guile]()  | [...]() | [...]() | ![...]() | ![...]()   |
 -->
-
-## Numeric Calculator
-
-[Specification](problems/numeric-calc/spec/main.typ) | [PDF](problems/numeric-calc/spec/main.pdf)
-
-| Language    | Package | Docs    | Tests    | Benchmarks |
-| ----------- | ------- | ------- | -------- | ---------- |
-| [Rust]()    | [...]() | [...]() | ![...]() | ![...]()   |
-| [Haskell]() | [...]() | [...]() | ![...]() | ![...]()   |
 
 <!--
 | [Typescript]() | [...]() | [...]() | ![...]() | ![...]()   |
