@@ -10,7 +10,7 @@ All other materials are under the ... license.
 
 | Language    | Package | Docs    | Tests    | Benchmarks |
 | ----------- | ------- | ------- | -------- | ---------- |
-| [Rust](problems/numeric-calc/rust)    | [...]() | [...]() | ![...]() | ![...]()   |
+| [Rust](problems/calculator/rust)    | [...]() | [...]() | ![...]() | ![...]()   |
 | [Haskell]() | [...]() | [...]() | ![...]() | ![...]()   |
 
 ## Parser Generator
